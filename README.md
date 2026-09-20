@@ -2,6 +2,14 @@
 
 基于 Everything 快速搜索 + NTFS 符号链接/硬链接技术的重复文件查找与清理工具。
 
+## 📥 下载
+
+**最新预览版 v0.1.0**：[📥 DuplicateCleaner.exe (51 MB)](https://github.com/loushijushi/DuplicateCleaner/releases/tag/v0.1.0)
+
+> 直接下载运行，无需安装 Python。需配合 [Everything](https://www.voidtools.com/) 使用。
+
+[查看所有版本 →](https://github.com/loushijushi/DuplicateCleaner/releases)
+
 ## 功能特性
 
 - 🚀 **极速搜索**: 利用 Everything 索引数据库，秒级搜索指定目录下所有文件
