@@ -4,9 +4,9 @@
 
 ## 📥 下载
 
-**最新预览版 v0.1.0**：[📥 DuplicateCleaner.exe (51 MB)](https://github.com/loushijushi/DuplicateCleaner/releases/tag/v0.1.0)
+**最新版 v0.1.0**：[📥 DuplicateCleaner.exe (51 MB)](https://github.com/loushijushi/DuplicateCleaner/releases/tag/v0.1.0)
 
-> 直接下载运行，无需安装 Python。需配合 [Everything](https://www.voidtools.com/) 使用。
+> 直接下载运行，**内置 es.exe 无需额外安装**。仅需 [Everything](https://www.voidtools.com/) 运行并建立索引。
 
 [查看所有版本 →](https://github.com/loushijushi/DuplicateCleaner/releases)
 
@@ -24,10 +24,10 @@
 ## 系统要求
 
 - Windows 10/11
-- [Everything](https://www.voidtools.com/) 已安装并运行
+- [Everything](https://www.voidtools.com/) 已安装并运行（仅需主程序，无需 CLI）
 - Python 3.8+ (仅源码运行需要)
 
-## 安装依赖
+## 安装依赖 (仅源码运行)
 
 ```bash
 pip install -r requirements.txt
@@ -35,12 +35,12 @@ pip install -r requirements.txt
 
 ## 使用方法
 
-1. 确保 Everything 已安装并正在运行
+1. 确保 Everything 已安装、运行并建立索引
 2. 运行程序：
    ```bash
    python main.py
    ```
-   或直接运行打包好的 `DuplicateCleaner.exe`
+   或直接运行打包好的 `DuplicateCleaner.exe`（已内置 es.exe）
 3. 点击"浏览..."或"添加目录"选择要扫描的目录 (支持多选、路径粘贴跳转)
 4. 点击"开始扫描"等待完成
 5. 在结果列表中勾选要删除的重复文件(保留文件默认不可勾选)
@@ -87,7 +87,7 @@ pip install pyinstaller
 pyinstaller --clean --noconfirm --onefile --windowed --name DuplicateCleaner main.py
 ```
 
-生成的 `dist/DuplicateCleaner.exe` (约 51 MB) 可直接分发使用，无需安装 Python。
+生成的 `dist/DuplicateCleaner.exe` (约 51 MB) 可直接分发使用，无需安装 Python，**已内置 es.exe**。
 
 ## 快捷键
 
