@@ -365,6 +365,44 @@ class NTFSLinker:
                 return False, f"创建硬链接失败，错误代码: {ctypes.GetLastError()}"
         except Exception as e:
             return False, f"创建硬链接后备方案异常: {str(e)}"
+
+    def _create_shortcut(self, link_path: str, target_path: str) -> Tuple[bool, str]:
+        """创建 Windows 快捷方式 (.lnk)，用于不支持链接的文件系统（如 exFAT/FAT32）
+
+        快捷方式扩展名必须是 .lnk/.url，因此会在原文件名后追加 .lnk。
+        """
+        link_path = os.path.abspath(link_path)
+        target_path = os.path.abspath(target_path)
+
+        if not os.path.isfile(target_path):
+            return False, f"目标文件不存在: {target_path}"
+
+        if not link_path.lower().endswith(".lnk"):
+            link_path = f"{link_path}.lnk"
+
+        if os.path.lexists(link_path):
+            return False, f"链接路径已存在: {link_path}"
+
+        try:
+            parent = os.path.dirname(link_path)
+            if parent and not os.path.isdir(parent):
+                os.makedirs(parent, exist_ok=True)
+
+            shell = win32com.client.Dispatch("WScript.Shell")
+            shortcut = shell.CreateShortcut(link_path)
+            shortcut.Targetpath = target_path
+            shortcut.WorkingDirectory = os.path.dirname(target_path)
+            shortcut.save()
+
+            if os.path.isfile(link_path):
+                return True, link_path
+            return False, "快捷方式创建后未找到文件"
+        except Exception as e:
+            return False, f"创建快捷方式异常: {str(e)}"
+
+    def _has_shortcut_fallback(self, path: str) -> bool:
+        """检查路径对应的原始文件是否已被替换为快捷方式"""
+        return os.path.isfile(f"{os.path.abspath(path)}.lnk")
         
     def move_to_recycle_bin(self, file_path: str) -> Tuple[bool, str]:
         try:
@@ -443,11 +481,19 @@ class NTFSLinker:
 
             if not success:
                 # 该文件系统既不支持符号链接也不支持硬链接（如 exFAT/FAT32），
-                # 退化为仅移入回收站，不在原位置创建链接
+                # 退化为快捷方式：原文件删除后留下 X.lnk 指向保留文件
+                shortcut_path = f"{duplicate_path}.lnk"
+                sc_ok, sc_msg = self._create_shortcut(shortcut_path, original_path)
+                if not sc_ok:
+                    self._cleanup_temp(temp_path)
+                    return False, f"创建{link_kind}失败且快捷方式回退也失败: {sc_msg}"
+
                 recycle_ok, recycle_msg = self.move_to_recycle_bin(duplicate_path)
-                if recycle_ok:
-                    return True, f"该文件系统不支持链接，已仅移入回收站（可还原）: {msg}"
-                return False, f"创建临时{link_kind}失败: {msg}"
+                if not recycle_ok:
+                    self._cleanup_temp(shortcut_path)
+                    return False, f"{recycle_msg}（快捷方式未生效，文件保持原样）"
+
+                return True, f"该文件系统不支持链接，已替换为快捷方式 {os.path.basename(shortcut_path)}"
 
             # 第二步：把重复文件移入回收站（此时已有可回退的备份）
             recycle_success, recycle_msg = self.move_to_recycle_bin(duplicate_path)

@@ -921,11 +921,13 @@ class MainWindow(QMainWindow):
             f"确定要处理 {total_selected} 个重复文件吗？\n\n"
             f"操作说明：\n"
             f"• 选中的重复文件会先移入回收站\n"
-            f"• 原位置会创建指向保留文件的符号链接\n"
-            f"• 符号链接与原文件共享同一数据块，不占用额外空间\n"
-            f"• 所有路径仍可正常访问文件内容\n"
+            f"• 原位置会创建指向保留文件的链接\n"
+            f"• 链接与原文件共享同一数据块，不占用额外空间\n"
             f"• 如需恢复，可从回收站还原原文件\n\n"
-            f"注：exFAT/FAT32 移动硬盘不支持链接，将仅移入回收站。\n\n"
+            f"链接类型按磁盘自动选择：\n"
+            f"• NTFS：符号链接，原文件名不变，程序可正常读取\n"
+            f"• exFAT/FAT32：快捷方式 X.ext.lnk，每个约 0.5 KB\n"
+            f"  （此类磁盘不支持链接，程序无法按原名读取，需双击访问）\n\n"
             f"建议在回收站确认无误后再清空。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
