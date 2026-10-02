@@ -19,6 +19,18 @@ class FileInfo:
     created_time: float
 
 
+SKIP_EXTENSIONS = {'.lnk', '.url'}
+
+
+def should_skip(path: str, name: str) -> bool:
+    """跳过链接/快捷方式类文件，它们不应参与重复文件比对"""
+    if os.path.splitext(name)[1].lower() in SKIP_EXTENSIONS:
+        return True
+    if os.path.islink(path):
+        return True
+    return False
+
+
 def get_application_dir() -> str:
     """Get the directory where the application/executable is running from."""
     if getattr(sys, 'frozen', False):
@@ -133,6 +145,8 @@ class EverythingSearch:
             for root, dirs, files in os.walk(directory):
                 for f in files:
                     fp = os.path.join(root, f)
+                    if should_skip(fp, f):
+                        continue
                     try:
                         size = os.path.getsize(fp)
                         if min_size > 0 and size < min_size:
@@ -247,6 +261,10 @@ class EverythingSearch:
                 # Skip directories - es.exe returns directories with recursive size,
                 # which creates false size matches. Use os.path.isfile() to verify.
                 if not os.path.isfile(path):
+                    continue
+                
+                # Skip links/shortcuts - they should not be compared as duplicates
+                if should_skip(path, os.path.basename(path)):
                     continue
                 
                 # Only add files with size > 0
