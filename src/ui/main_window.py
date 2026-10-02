@@ -778,7 +778,7 @@ class MainWindow(QMainWindow):
                 return
             
             settings = self.get_current_settings()
-            self.log(f"扫描启动: es.exe 路径 = {settings['es_path']}")
+            self.log(f"扫描启动: es.exe 已内置")
             self.log(f"[SCAN] 初始化 DuplicateFinder...")
             self.finder = DuplicateFinder(settings["es_path"])
             status_text = self.finder.everything.get_status_text()
@@ -787,13 +787,12 @@ class MainWindow(QMainWindow):
             
             if not self.finder.everything.is_available():
                 QMessageBox.critical(self, "错误", 
-                    f"无法连接到 Everything (es.exe)\n\n"
+                    f"无法连接到 Everything\n\n"
                     f"状态: {status_text}\n\n"
                     f"请检查:\n"
                     f"1. Everything 是否已安装并正在运行 (系统托盘)\n"
-                    f"2. 设置中的 es.exe 路径是否正确\n"
-                    f"3. 是否将 Everything 安装目录添加到系统 PATH\n\n"
-                    f"可在「设置」中配置 es.exe 完整路径。")
+                    f"2. Everything 是否已完成索引\n\n"
+                    f"es.exe 已内置，无需另外安装。")
                 self.update_es_status()
                 return
             
@@ -986,7 +985,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             dialog.save_settings()
             es_path = dialog.get_settings()["es_path"]
-            self.log(f"设置保存: es.exe 路径 = {es_path}")
+            self.log(f"设置保存: es.exe = {es_path} (已内置)")
             self.finder = DuplicateFinder(es_path)
             self.update_es_status()
             self.log(f"状态更新: {self.finder.everything.get_status_text()}")
@@ -1011,7 +1010,7 @@ class MainWindow(QMainWindow):
             "• 通过文件大小、修改时间、指纹(xxHash+SHA256)三重校验\n"
             "• 使用 NTFS 符号链接替换重复文件，原路径仍可访问\n"
             "• 支持硬链接、符号链接、目录联接\n\n"
-            "依赖: Everything (需安装并包含 es.exe)")
+            "依赖: Everything (仅需安装主程序，es.exe 已内置)")
 
     def log(self, message: str):
         from datetime import datetime

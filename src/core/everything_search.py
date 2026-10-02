@@ -81,7 +81,7 @@ class EverythingSearch:
             filename = os.path.basename(self.es_path).lower()
             if filename != "es.exe":
                 self._es_available = False
-                self._es_version = f"错误: 选择了 {filename}，需要 es.exe (命令行工具)，不是 Everything.exe (GUI程序)。\n请从 https://www.voidtools.com/downloads/ 下载 es.exe"
+                self._es_version = f"错误: 选择了 {filename}，需要 es.exe (命令行工具)，不是 Everything.exe (GUI程序)。\nes.exe 已随程序内置，请检查程序文件是否完整。"
                 return False
             
             result = subprocess.run([self.es_path, "-version"], capture_output=True, text=True, timeout=10, encoding='utf-8', errors='ignore', creationflags=CREATE_NO_WINDOW)
