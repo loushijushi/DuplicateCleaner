@@ -925,6 +925,7 @@ class MainWindow(QMainWindow):
             f"• 符号链接与原文件共享同一数据块，不占用额外空间\n"
             f"• 所有路径仍可正常访问文件内容\n"
             f"• 如需恢复，可从回收站还原原文件\n\n"
+            f"注：exFAT/FAT32 移动硬盘不支持链接，将仅移入回收站。\n\n"
             f"建议在回收站确认无误后再清空。",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No

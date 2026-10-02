@@ -41,6 +41,7 @@ class NTFSLinker:
     def __init__(self):
         self.kernel32 = ctypes.windll.kernel32
         self.shell32 = ctypes.windll.shell32
+        self._symlink_support_cache = {}
         self._setup_functions()
 
     def _setup_functions(self):
@@ -294,49 +295,51 @@ class NTFSLinker:
             return False, f"创建符号链接异常: {str(e)}"
 
     def _check_fs_supports_symlinks(self, path: str) -> bool:
-        """检查文件系统是否支持符号链接"""
-        try:
-            path = os.path.abspath(path)
-            root = os.path.splitdrive(path)[0] + '\\'
-            if not root or root == ':\\':
-                root = path
-            
-            fs_flags = ctypes.c_ulong(0)
-            success = self.kernel32.GetVolumeInformationW(
-                ctypes.c_wchar_p(path),
-                None, 0,
-                None, None,
-                ctypes.byref(ctypes.c_ulong(0)),
-                None, 0
-            )
-            if not success:
-                return False
-            
-            # 通过尝试创建一个临时符号链接来测试
-            import tempfile
-            import uuid
-            test_dir = tempfile.gettempdir()
-            test_link = os.path.join(tempfile.gettempdir(), f"test_symlink_{uuid.uuid4().hex}.tmp")
-            test_target = os.path.join(tempfile.gettempdir(), "test_target.txt")
-            
-            try:
-                with open(os.path.join(tempfile.gettempdir(), "test_target.txt"), 'w') as f:
-                    f.write("test")
-                flags = 0x0
-                result = self.kernel32.CreateSymbolicLinkW(
-                    os.path.join(tempfile.gettempdir(), f"test_symlink_{uuid.uuid4().hex}.tmp"),
-                    os.path.join(tempfile.gettempdir(), "test_target.txt"), 
-                    0
-                )
-                if result:
-                    os.remove(os.path.join(tempfile.gettempdir(), f"test_symlink_{uuid.uuid4().hex}.tmp"))
-                    os.remove(os.path.join(tempfile.gettempdir(), "test_target.txt"))
-                    return True
-            except Exception:
-                pass
+        """检查目标路径所在文件系统是否支持符号链接，结果按盘符缓存"""
+        path = os.path.abspath(path)
+        drive = os.path.splitdrive(path)[0].upper()
+
+        if drive in self._symlink_support_cache:
+            return self._symlink_support_cache[drive]
+
+        supports = self._probe_symlink_support(path)
+        self._symlink_support_cache[drive] = supports
+        return supports
+
+    def _probe_symlink_support(self, path: str) -> bool:
+        """在目标路径所在目录实际创建符号链接来探测支持情况"""
+        if not os.path.isdir(path):
+            path = os.path.dirname(path)
+        if not os.path.isdir(path):
             return False
+
+        token = f"_dc_probe_{uuid.uuid4().hex}"
+        target = os.path.join(path, token + ".txt")
+        link = os.path.join(path, token + ".lnk")
+
+        try:
+            with open(target, "w") as f:
+                f.write("probe")
+
+            result = self.kernel32.CreateSymbolicLinkW(
+                ctypes.c_wchar_p(link),
+                ctypes.c_wchar_p(target),
+                0
+            )
+            if not result:
+                return False
+
+            is_link = os.path.islink(link)
+            return is_link
         except Exception:
             return False
+        finally:
+            for leftover in (link, target):
+                try:
+                    if os.path.islink(leftover) or os.path.exists(leftover):
+                        os.remove(leftover)
+                except OSError:
+                    pass
 
     def _create_hard_link_fallback(self, link_path: str, target_path: str) -> Tuple[bool, str]:
         """当符号链接不支持时，尝试创建硬链接作为后备"""
@@ -424,43 +427,58 @@ class NTFSLinker:
             # 安全检查：防止误删原始文件
             if os.path.samefile(duplicate_path, original_path):
                 return True, "已是同一文件（硬链接），无需处理"
-            
-            # 检查文件系统是否支持符号链接
+
+            link_kind = "符号链接"
             if not self._check_fs_supports_symlinks(duplicate_path):
-                # 文件系统不支持符号链接，回退到硬链接
-                return self._create_hard_link_fallback(duplicate_path, original_path)
-            
-            temp_path = f"{duplicate_path}.duplicatecleaner-{uuid.uuid4().hex}.tmp"
-            success, msg = self.create_symbolic_link(temp_path, original_path)
+                link_kind = "硬链接"
+            elif not self._same_volume(duplicate_path, original_path):
+                link_kind = "硬链接"
+
+            # 第一步：先在临时位置创建链接（成功后才能安全删除原重复文件）
+            temp_path = f"{duplicate_path}.dc-{uuid.uuid4().hex}.tmp"
+            if link_kind == "符号链接":
+                success, msg = self.create_symbolic_link(temp_path, original_path)
+            else:
+                success, msg = self._create_hard_link_fallback(temp_path, original_path)
+
             if not success:
-                return False, f"创建临时符号链接失败: {msg}"
-            
+                # 该文件系统既不支持符号链接也不支持硬链接（如 exFAT/FAT32），
+                # 退化为仅移入回收站，不在原位置创建链接
+                recycle_ok, recycle_msg = self.move_to_recycle_bin(duplicate_path)
+                if recycle_ok:
+                    return True, f"该文件系统不支持链接，已仅移入回收站（可还原）: {msg}"
+                return False, f"创建临时{link_kind}失败: {msg}"
+
+            # 第二步：把重复文件移入回收站（此时已有可回退的备份）
             recycle_success, recycle_msg = self.move_to_recycle_bin(duplicate_path)
             if not recycle_success:
-                # 回收站失败，清理临时文件并尝试硬链接后备方案
-                try:
-                    temp_files = glob.glob(f"{duplicate_path}.duplicatecleaner-*.tmp")
-                    for tmp in temp_files:
-                        try:
-                            os.remove(tmp)
-                        except OSError:
-                            pass
-                except:
-                    pass
-                return self._create_hard_link_fallback(duplicate_path, original_path)
-            
+                self._cleanup_temp(temp_path)
+                return False, f"{recycle_msg}（{link_kind}未生效，文件保持原样）"
+
+            # 第三步：把临时链接移到原位置
             try:
-                os.rename(temp_path, duplicate_path)
-                return True, "原文件已移入回收站，原位置已创建符号链接"
+                os.replace(temp_path, duplicate_path)
             except OSError as e:
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
-                # 重命名失败，尝试硬链接后备方案
-                fallback_success, fallback_msg = self._create_hard_link_fallback(duplicate_path, original_path)
-                if fallback_success:
-                    return True, f"符号链接创建失败，已回退到硬链接: {fallback_msg}"
-                return False, f"原文件已移入回收站，但创建原位置符号链接失败: {e}"
+                self._cleanup_temp(temp_path)
+                return False, f"重复文件已移入回收站，但{link_kind}创建失败: {e}"
+
+            return True, f"重复文件已移入回收站，原位置已创建{link_kind}"
         except Exception as e:
             return False, f"替换过程异常: {str(e)}"
+
+    def _same_volume(self, path_a: str, path_b: str) -> bool:
+        """判断两个路径是否在同一卷上（硬链接的硬性要求）"""
+        try:
+            return os.path.splitdrive(os.path.abspath(path_a))[0].upper() == \
+                   os.path.splitdrive(os.path.abspath(path_b))[0].upper()
+        except Exception:
+            return False
+
+    def _cleanup_temp(self, temp_path: str) -> None:
+        """清理临时链接文件"""
+        for leftover in glob.glob(f"{temp_path}") + glob.glob(f"{temp_path}.*"):
+            try:
+                if os.path.islink(leftover) or os.path.exists(leftover):
+                    os.remove(leftover)
+            except OSError:
+                pass
